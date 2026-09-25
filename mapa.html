@@ -3,158 +3,374 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wybór Paczkomatu InPost - Działająca Mapa</title>
+    <title>Wybór Punktu InPost - Sklep</title>
     
-    <!-- 1. Style oraz skrypt InPost Geowidget -->
-    <link rel="stylesheet" href="https://geowidget.inpost.pl/inpost-geowidget.css"/>
-    <script src="https://geowidget.inpost.pl/inpost-geowidget.js" defer></script>
-
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS for interactive maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f4f9;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-        }
-        .container {
-            background: #ffffff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            max-width: 800px;
-            width: 100%;
-        }
-        h2 {
-            color: #111;
-            margin-top: 0;
-            border-bottom: 2px solid #ffcc00;
-            padding-bottom: 10px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            box-sizing: border-box;
-            background-color: #fafafa;
-        }
-        
-        /* 2. Stylizowanie komponentu mapy InPost */
-        inpost-geowidget {
-            display: block;
-            width: 100%;
-            height: 500px; /* Wysokość mapy */
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid #ddd;
-            margin-top: 10px;
-        }
-        
-        .wybrany-punkt-box {
-            background-color: #fff9e6;
-            border-left: 4px solid #ffcc00;
-            padding: 15px;
-            margin-top: 20px;
-            border-radius: 4px;
-            display: none;
-        }
-        button[type="submit"] {
+        body { font-family: 'Inter', sans-serif; }
+        #map { height: 100%; min-height: 400px; z-index: 10; }
+        .custom-marker {
             background-color: #ffcc00;
-            color: #000;
-            border: none;
-            padding: 12px 24px;
-            font-size: 16px;
+            border: 2px solid #1a1a1a;
+            border-radius: 50%;
+            text-align: center;
             font-weight: bold;
-            border-radius: 6px;
-            cursor: pointer;
-            margin-top: 20px;
-            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        button[type="submit"]:hover {
-            background-color: #e6b800;
-        }
+        /* Custom scrollbar for list */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
-<body>
+<body class="bg-slate-50 text-slate-800 antialiased h-screen flex flex-col overflow-hidden">
 
-<div class="container">
-    <h2>Formularz dostawy sklepu</h2>
-    
-    <form action="#" method="POST" id="checkout-form">
+    <header class="bg-yellow-400 text-slate-900 shadow-md py-3 px-6 flex justify-between items-center z-20">
+        <div class="flex items-center space-x-3">
+            <div class="bg-slate-900 text-yellow-400 font-black px-3 py-1.5 rounded-lg text-lg tracking-wider">InPost</div>
+            <h1 class="font-bold text-lg hidden sm:block">Wyszukiwarka Paczkomatów i Punktów</h1>
+        </div>
+        <div id="selected-summary" class="text-sm font-medium bg-white/80 px-4 py-1.5 rounded-full shadow-sm border border-yellow-500/30 truncate max-w-xs md:max-w-md">
+            Wybrany punkt: <span id="current-selected-text" class="font-bold text-slate-900">Brak (Wybierz poniżej)</span>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         
-        <div class="form-group">
-            <label for="paczkomat-kod">Wybrany Paczkomat:</label>
-            <input type="text" id="paczkomat-kod" name="paczkomat_kod" placeholder="Wskaż punkt na mapie i kliknij przycisk wyboru..." readonly required>
-        </div>
+        <!-- Sidebar with Search and List -->
+        <section class="w-full md:w-5/12 lg:w-4/12 bg-white flex flex-col h-1/2 md:h-full border-r border-slate-200 z-20 shadow-lg">
+            <!-- Search & Filters -->
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                <div class="relative mb-3">
+                    <input type="text" id="search-input" placeholder="Szukaj (np. miasto, kod, adres, nazwa)..." 
+                           class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 text-sm shadow-sm transition">
+                    <span class="absolute left-3.5 top-3 text-slate-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </span>
+                </div>
+                
+                <!-- Filter Badges -->
+                <div class="flex items-center justify-between text-xs">
+                    <div class="flex space-x-2">
+                        <button onclick="setFilter('all')" id="filter-all" class="filter-btn px-3 py-1.5 rounded-lg font-semibold bg-slate-900 text-white transition shadow-sm">Wszystkie</button>
+                        <button onclick="setFilter('locker')" id="filter-locker" class="filter-btn px-3 py-1.5 rounded-lg font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition">Paczkomaty</button>
+                        <button onclick="setFilter('pop')" id="filter-pop" class="filter-btn px-3 py-1.5 rounded-lg font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition">Punkty (POP)</button>
+                    </div>
+                    <span id="results-count" class="text-slate-500 font-medium">Ładowanie...</span>
+                </div>
+            </div>
 
-        <!-- 3. DEDYKOWANY ELEMENT INPOST GEOWIDGET (Zamiast zwykłego div) -->
-        <!-- Używamy oficjalnego tokenu z dokumentacji, który poprawnie renderuje mapę w środowisku testowym/lokalnym -->
-        <inpost-geowidget 
-            id="mapa-inpost" 
-            token="token-for-geo" 
-            language="pl" 
-            config="parcelCollect">
-        </inpost-geowidget>
+            <!-- Points Scrollable List -->
+            <div id="points-list" class="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-2">
+                <!-- Loading placeholder -->
+                <div class="flex flex-col items-center justify-center py-16 text-slate-400 space-y-3">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
+                    <p class="text-sm">Pobieranie punktów InPost...</p>
+                </div>
+            </div>
+        </section>
 
-        <div id="info-box" class="wybrany-punkt-box">
-            <strong>Szczegóły punktu:</strong>
-            <div id="info-tresc"></div>
-        </div>
+        <!-- Interactive Map Container -->
+        <section class="w-full md:w-7/12 lg:w-8/12 h-1/2 md:h-full relative bg-slate-200">
+            <div id="map" class="w-full h-full"></div>
+            
+            <!-- Floating Geo Button -->
+            <button onclick="locateUser()" class="absolute bottom-6 right-6 z-[400] bg-white hover:bg-slate-50 text-slate-800 p-3.5 rounded-full shadow-xl border border-slate-200 flex items-center justify-center transition transform hover:scale-105 active:scale-95" title="Pokaż moją lokalizację">
+                <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </button>
+        </section>
 
-        <button type="submit">Złóż zamówienie</button>
-    </form>
-</div>
+    </main>
 
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const widgetElement = document.getElementById('mapa-inpost');
+    <script>
+        // Global State Variables
+        let map;
+        let markersLayer = L.layerGroup();
+        let allPoints = [];
+        let filteredPoints = [];
+        let selectedPoint = null;
+        let currentFilter = 'all';
+        let userLocationMarker = null;
 
-        // 4. Nasłuchiwanie na zdarzenie wyboru punktu bezpośrednio z komponentu InPost
-        widgetElement.addEventListener('inpost.geowidget.init', function(event) {
-            console.log("Geowidget został pomyślnie załadowany.");
+        // Configuration constants
+        const DATA_URL = 'https://sklepskasowani.vercel.app/mapa/points.json';
+
+        // Initialize Application on Window Load
+        window.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            fetchPoints();
+            
+            // Event listener for search box
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                filterAndRender(e.target.value);
+            });
         });
 
-        // Obsługa akcji po kliknięciu "Wybieram ten punkt" wewnątrz okienka na mapie
-        window.afterPointSelected = function(point) {
-            // Wpisanie kodu maszyny do pola formularza
-            document.getElementById('paczkomat-kod').value = point.name;
-            
-            // Wyświetlenie dodatkowego okienka z adresem dla klienta
-            const infoBox = document.getElementById('info-box');
-            const infoTresc = document.getElementById('info-tresc');
-            
-            infoTresc.innerHTML = `
-                <br><strong>Kod:</strong> ${point.name}
-                <br><strong>Adres:</strong> ${point.address.line1}, ${point.address.line2}
-                <br><strong>Opis:</strong> ${point.description || 'Brak dodatkowego opisu.'}
-            `;
-            infoBox.style.display = 'block';
-        };
+        function initMap() {
+            // Default center on Poland (Warsaw)
+            map = L.map('map', { zoomControl: false }).setView([52.237049, 21.017532], 12);
 
-        // Powiązanie funkcji globalnej z wewnętrznym mechanizmem InPostu
-        widgetElement.setAttribute('onpoint', 'afterPointSelected');
+            // Add custom styled zoom control to bottom right
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        // Walidacja formularza przed wysyłką
-        document.getElementById('checkout-form').addEventListener('submit', function(e) {
-            const paczkomatInput = document.getElementById('paczkomat-kod').value;
-            if (!paczkomatInput) {
-                e.preventDefault();
-                alert('Proszę wybrać Paczkomat z mapy przed złożeniem zamówienia!');
+            // Add OpenStreetMap tile layer with high clarity
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | InPost Widget'
+            }).addTo(map);
+
+            markersLayer.addTo(map);
+        }
+
+        async function fetchPoints() {
+            try {
+                const response = await fetch(DATA_URL);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+                
+                // Parse points array (supports different JSON formats: direct array or nested object)
+                allPoints = Array.isArray(data) ? data : (data.items || data.points || Object.values(data)[0] || []);
+                
+                if (allPoints.length === 0) {
+                    throw new Error('Brak danych w pliku JSON');
+                }
+
+                // Normalize fields if keys differ
+                allPoints = allPoints.map(p => ({
+                    id: p.name || p.id || p.code || Math.random().toString(),
+                    name: p.name || p.code || 'Punkt InPost',
+                    type: (p.type || p.payment_point || p.is_locker_automated === true) ? 'locker' : 'pop',
+                    address: formatAddress(p),
+                    latitude: parseFloat(p.latitude || p.lat || (p.location && p.location.latitude)),
+                    longitude: parseFloat(p.longitude || p.lng || p.lon || (p.location && p.location.longitude)),
+                    opening_hours: p.opening_hours || p.hours || '24/7 (Paczkomat)'
+                })).filter(p => !isNaN(p.latitude) && !isNaN(p.longitude));
+
+                filteredPoints = [...allPoints];
+                renderPoints();
+                
+                // If points available, fit map bounds or center on first point
+                if (allPoints.length > 0) {
+                    const firstValid = allPoints.find(p => p.latitude && p.longitude);
+                    if (firstValid) {
+                        map.setView([firstValid.latitude, firstValid.longitude], 13);
+                    }
+                }
+            } catch (error) {
+                console.error('Błąd pobierania punktów:', error);
+                document.getElementById('points-list').innerHTML = `
+                    <div class="p-6 text-center text-red-500 space-y-2">
+                        <p class="font-bold">Nie udało się pobrać punktów InPost.</p>
+                        <p class="text-xs text-slate-500">Sprawdź połączenie z internetem lub dostępność pliku JSON.</p>
+                        <button onclick="fetchPoints()" class="mt-2 px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg text-sm font-semibold shadow hover:bg-yellow-500 transition">Spróbuj ponownie</button>
+                    </div>
+                `;
+                document.getElementById('results-count').innerText = 'Błąd danych';
             }
-        });
-    });
-</script>
+        }
 
+        // Helper to format address fields neatly
+        function formatAddress(p) {
+            if (p.address_details) {
+                const ad = p.address_details;
+                return `${ad.street || ''} ${ad.building_number || ''}, ${ad.post_code || ''} ${ad.city || ''}`.trim();
+            }
+            if (p.address) return p.address;
+            if (p.description) return p.description;
+            return 'Adres niedostępny';
+        }
+
+        function setFilter(type) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.className = "filter-btn px-3 py-1.5 rounded-lg font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition";
+            });
+            const activeBtn = document.getElementById(`filter-${type}`);
+            if(activeBtn) {
+                activeBtn.className = "filter-btn px-3 py-1.5 rounded-lg font-semibold bg-slate-900 text-white transition shadow-sm";
+            }
+            filterAndRender(document.getElementById('search-input').value);
+        }
+
+        function filterAndRender(query) {
+            const lowerQuery = query.toLowerCase().trim();
+            
+            filteredPoints = allPoints.filter(p => {
+                // Type filter
+                if (currentFilter === 'locker' && p.type !== 'locker') return false;
+                if (currentFilter === 'pop' && p.type !== 'pop') return false;
+
+                // Search query filter
+                if (!lowerQuery) return true;
+                const matchName = p.name.toLowerCase().includes(lowerQuery);
+                const matchAddr = p.address.toLowerCase().includes(lowerQuery);
+                return matchName || matchAddr;
+            });
+
+            renderPoints();
+        }
+
+        function renderPoints() {
+            const listContainer = document.getElementById('points-list');
+            const countEl = document.getElementById('results-count');
+            
+            countEl.innerText = `Znaleziono: ${filteredPoints.length}`;
+            listContainer.innerHTML = '';
+
+            markersLayer.clearLayers();
+
+            if (filteredPoints.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="p-8 text-center text-slate-400">
+                        <p class="text-sm">Brak punktów spełniających kryteria wyszukiwania.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render list items & markers (limit list render for performance if dataset is massive)
+            const displayLimit = 150;
+            const pointsToRender = filteredPoints.slice(0, displayLimit);
+
+            pointsToRender.forEach(point => {
+                // 1. Create list card element
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-xl border transition cursor-pointer flex flex-col justify-between ${selectedPoint && selectedPoint.id === point.id ? 'border-yellow-500 bg-yellow-50/60 shadow-sm' : 'border-slate-200 hover:border-yellow-400 bg-white hover:bg-slate-50'}`;
+                
+                const isLocker = point.type === 'locker';
+                const badgeClass = isLocker ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-blue-100 text-blue-800 border-blue-200';
+                const badgeText = isLocker ? 'Paczkomat' : 'Punkt Odbioru';
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-start justify-between mb-1">
+                            <span class="font-bold text-slate-900 text-base">${point.name}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full border font-medium ${badgeClass}">${badgeText}</span>
+                        </div>
+                        <p class="text-sm text-slate-600 mb-2">${point.address}</p>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+                        <span class="text-xs text-slate-500 flex items-center">
+                            <svg class="w-3.5 h-3.5 mr-1 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            ${point.opening_hours}
+                        </span>
+                        <button onclick="event.stopPropagation(); selectPoint('${point.id}')" class="px-3 py-1 bg-slate-900 hover:bg-yellow-400 hover:text-slate-900 text-white rounded-lg text-xs font-bold transition shadow-sm">
+                            Wybierz
+                        </button>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    focusOnPoint(point);
+                });
+
+                listContainer.appendChild(card);
+
+                // 2. Create Leaflet Marker
+                const customIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: ${isLocker ? '#facc15' : '#3b82f6'}; color: #1e293b; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid #ffffff; box-shadow: 0 3px 6px rgba(0,0,0,0.2); font-size: 11px;">${isLocker ? 'P' : 'POP'}</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+
+                const marker = L.marker([point.latitude, point.longitude], { icon: customIcon });
+                
+                marker.bindPopup(`
+                    <div class="p-2">
+                        <strong class="text-base block mb-1 text-slate-900">${point.name}</strong>
+                        <p class="text-sm text-slate-600 mb-2">${point.address}</p>
+                        <p class="text-xs text-slate-500 mb-3">Godziny: ${point.opening_hours}</p>
+                        <button onclick="selectPoint('${point.id}')" class="w-full py-2 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold rounded-lg text-xs shadow transition">Wybierz ten punkt</button>
+                    </div>
+                `);
+
+                marker.on('click', () => {
+                    // Highlight corresponding card in list if needed
+                });
+
+                markersLayer.addLayer(marker);
+            });
+
+            if (filteredPoints.length > displayLimit) {
+                const notice = document.createElement('div');
+                notice.className = 'p-3 text-center text-xs text-slate-400 italic';
+                notice.innerText = `Wyświetlono pierwsze ${displayLimit} wyników. Użyj wyszukiwarki, aby zawęzić listę.`;
+                listContainer.appendChild(notice);
+            }
+        }
+
+        function focusOnPoint(point) {
+            map.setView([point.latitude, point.longitude], 16, { animate: true });
+            
+            // Highlight card
+            renderPoints();
+        }
+
+        function selectPoint(pointId) {
+            const found = allPoints.find(p => p.id === pointId);
+            if (!found) return;
+
+            selectedPoint = found;
+            document.getElementById('current-selected-text').innerText = `${found.name} - ${found.address}`;
+            document.getElementById('current-selected-text').className = "font-bold text-yellow-700";
+
+            renderPoints();
+
+            // Notify parent window or e-commerce platform if embedded as an iframe widget
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'INPOST_POINT_SELECTED',
+                    point: found
+                }, '*');
+            }
+        }
+
+        function locateUser() {
+            if (!navigator.geolocation) {
+                alert('Geolokalizacja nie jest wspierana przez Twoją przeglądarkę.');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    
+                    map.setView([lat, lon], 14, { animate: true });
+
+                    if (userLocationMarker) {
+                        map.removeLayer(userLocationMarker);
+                    }
+
+                    const userIcon = L.divIcon({
+                        className: 'user-loc-icon',
+                        html: `<div style="background-color: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    });
+
+                    userLocationMarker = L.marker([lat, lon], { icon: userIcon }).addTo(map)
+                        .bindPopup("Twoja lokalizacja").openPopup();
+                },
+                () => {
+                    alert('Nie udało się pobrać Twojej lokalizacji.');
+                }
+            );
+        }
+    </script>
 </body>
 </html>
