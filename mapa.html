@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wybór Paczkomatu InPost - Działająca Mapa</title>
+    
+    <!-- 1. Style oraz skrypt InPost Geowidget -->
+    <link rel="stylesheet" href="https://geowidget.inpost.pl/inpost-geowidget.css"/>
+    <script src="https://geowidget.inpost.pl/inpost-geowidget.js" defer></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            max-width: 800px;
+            width: 100%;
+        }
+        h2 {
+            color: #111;
+            margin-top: 0;
+            border-bottom: 2px solid #ffcc00;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            background-color: #fafafa;
+        }
+        
+        /* 2. Stylizowanie komponentu mapy InPost */
+        inpost-geowidget {
+            display: block;
+            width: 100%;
+            height: 500px; /* Wysokość mapy */
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
+        
+        .wybrany-punkt-box {
+            background-color: #fff9e6;
+            border-left: 4px solid #ffcc00;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+            display: none;
+        }
+        button[type="submit"] {
+            background-color: #ffcc00;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+        button[type="submit"]:hover {
+            background-color: #e6b800;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Formularz dostawy sklepu</h2>
+    
+    <form action="#" method="POST" id="checkout-form">
+        
+        <div class="form-group">
+            <label for="paczkomat-kod">Wybrany Paczkomat:</label>
+            <input type="text" id="paczkomat-kod" name="paczkomat_kod" placeholder="Wskaż punkt na mapie i kliknij przycisk wyboru..." readonly required>
+        </div>
+
+        <!-- 3. DEDYKOWANY ELEMENT INPOST GEOWIDGET (Zamiast zwykłego div) -->
+        <!-- Używamy oficjalnego tokenu z dokumentacji, który poprawnie renderuje mapę w środowisku testowym/lokalnym -->
+        <inpost-geowidget 
+            id="mapa-inpost" 
+            token="token-for-geo" 
+            language="pl" 
+            config="parcelCollect">
+        </inpost-geowidget>
+
+        <div id="info-box" class="wybrany-punkt-box">
+            <strong>Szczegóły punktu:</strong>
+            <div id="info-tresc"></div>
+        </div>
+
+        <button type="submit">Złóż zamówienie</button>
+    </form>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const widgetElement = document.getElementById('mapa-inpost');
+
+        // 4. Nasłuchiwanie na zdarzenie wyboru punktu bezpośrednio z komponentu InPost
+        widgetElement.addEventListener('inpost.geowidget.init', function(event) {
+            console.log("Geowidget został pomyślnie załadowany.");
+        });
+
+        // Obsługa akcji po kliknięciu "Wybieram ten punkt" wewnątrz okienka na mapie
+        window.afterPointSelected = function(point) {
+            // Wpisanie kodu maszyny do pola formularza
+            document.getElementById('paczkomat-kod').value = point.name;
+            
+            // Wyświetlenie dodatkowego okienka z adresem dla klienta
+            const infoBox = document.getElementById('info-box');
+            const infoTresc = document.getElementById('info-tresc');
+            
+            infoTresc.innerHTML = `
+                <br><strong>Kod:</strong> ${point.name}
+                <br><strong>Adres:</strong> ${point.address.line1}, ${point.address.line2}
+                <br><strong>Opis:</strong> ${point.description || 'Brak dodatkowego opisu.'}
+            `;
+            infoBox.style.display = 'block';
+        };
+
+        // Powiązanie funkcji globalnej z wewnętrznym mechanizmem InPostu
+        widgetElement.setAttribute('onpoint', 'afterPointSelected');
+
+        // Walidacja formularza przed wysyłką
+        document.getElementById('checkout-form').addEventListener('submit', function(e) {
+            const paczkomatInput = document.getElementById('paczkomat-kod').value;
+            if (!paczkomatInput) {
+                e.preventDefault();
+                alert('Proszę wybrać Paczkomat z mapy przed złożeniem zamówienia!');
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
